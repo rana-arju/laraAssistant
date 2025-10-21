@@ -5,7 +5,6 @@ import os
 from beanie import init_beanie
 from app.models.user import User, BloodQA, Product, Subscription
 
-
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 

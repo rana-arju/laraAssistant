@@ -1,8 +1,8 @@
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
 from enum import Enum
-from beanie import Document, Link
-from pydantic import EmailStr, Field
+from beanie import Document, Link, Indexed
+from pydantic import EmailStr, Field, ConfigDict
 from bson import ObjectId
 
 # -------------------------
@@ -125,28 +125,61 @@ class Subscription(Document):
 # User Model
 # -------------------------
 class User(Document):
+    """
+    User model for AI backend with camelCase fields
+    """
+    
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_default=True,
+        extra="forbid",
+        arbitrary_types_allowed=True
+    )
+    
     id: ObjectId = Field(default_factory=ObjectId, alias="_id")
-    firstName: str
-    lastName: str
-    email: EmailStr
-    password: Optional[str] = None
-    image: Optional[str] = None
-    role: Role = Role.USER
-    createdAt: datetime = Field(default_factory=datetime.utcnow)
-    updatedAt: datetime = Field(default_factory=datetime.utcnow)
-    status: UserStatus = UserStatus.ACTIVE
-    isDeleted: bool = False
-    stripeCustomerId: Optional[str] = None
-    subscriptionId: Optional[str] = None
-    subStartDate: Optional[datetime] = None
-    subEndDate: Optional[datetime] = None
-    subscription: Optional[List[Link[Subscription]]] = []
-    bloodQA: Optional[List[Link[BloodQA]]] = []
-
+    firstName: str = Field(..., min_length=1, max_length=50)
+    lastName: str = Field(..., min_length=1, max_length=50)
+    email: Indexed(EmailStr, unique=True) = Field(...)
+    password: Optional[str] = Field(default=None)
+    avatarUrl: Optional[str] = Field(default=None, alias="image")
+    role: Role = Field(default=Role.USER)
+    status: UserStatus = Field(default=UserStatus.ACTIVE)
+    isDeleted: bool = Field(default=False)
+    
+    # AI-specific fields
+    aiPreferences: Optional[Dict[str, Any]] = Field(default_factory=dict, description="AI chat preferences")
+    conversationHistory: Optional[List[str]] = Field(default_factory=list, description="Recent conversation IDs")
+    totalTokensUsed: int = Field(default=0, description="Total AI tokens used")
+    lastAiInteraction: Optional[datetime] = Field(default=None, description="Last AI chat timestamp")
+    
+    # Subscription fields
+    stripeCustomerId: Optional[str] = Field(default=None)
+    subscriptionId: Optional[str] = Field(default=None)
+    subscriptionStartDate: Optional[datetime] = Field(default=None, alias="subStartDate")
+    subscriptionEndDate: Optional[datetime] = Field(default=None, alias="subEndDate")
+    
+    # Timestamps
+    createdAt: Indexed(datetime) = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updatedAt: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    lastLoginAt: Optional[datetime] = Field(default=None)
+    
+    # Relationships
+    subscription: Optional[List[Link["Subscription"]]] = Field(default_factory=list)
+    bloodQA: Optional[List[Link["BloodQA"]]] = Field(default_factory=list)
+    
     class Settings:
         name = "users"
-
-    class Config:
-        alias_generator = lambda string: string[0].lower() + string[1:]
-        validate_by_name = True
-        arbitrary_types_allowed = True
+        
+        indexes = [
+            "email",
+            "status", 
+            "role",
+            "isDeleted",
+            "createdAt",
+            [("email", 1), ("isDeleted", 1)],
+            [("status", 1), ("isDeleted", 1)],
+        ]
